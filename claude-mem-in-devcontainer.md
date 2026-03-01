@@ -336,18 +336,114 @@ data['thedotmack'] = {
 
 ボリュームマウントでプラグインディレクトリが上書きされた場合に `node_modules` を再インストールします。
 
-**仕事 4: Claude Code フックの登録**
+**仕事 4: Claude Code フックの自作登録**
 
-claude-mem の核心機能であるフックを `settings.json` に書き込みます：
+ここが最も重要で複雑な部分です。通常 `claude plugins install` がやってくれるフック登録を、**全て手書きで再現**する必要があります。
 
-| イベント | タイミング | claude-mem の動作 |
-|----------|-----------|-----------------|
-| `SessionStart` | セッション開始 | Worker デーモン起動 + 過去コンテキスト読み込み |
-| `UserPromptSubmit` | プロンプト送信 | セッション初期化 |
-| `PostToolUse` | ツール使用後 | 観察の記録 |
-| `Stop` | セッション終了 | セッション要約 + 完了処理 |
+**なぜ自作が必要か：** `claude plugins install` は (1) パッケージのダウンロード、(2) `known_marketplaces.json` への登録、(3) フックの `settings.json` への登録を一括で行います。Docker ビルドでは (1) を `npm install -g` で、(2) を仕事 2 で代替しましたが、(3) だけは自動では行われません。フックが登録されていないと、**MCP サーバーは動くのに観察が一切記録されない** という状態になります。
 
-スクリプトは既存の設定を壊さないよう、既にフックが登録されている場合はスキップするマージロジックを持っています。
+**フックの構造：** Claude Code のフックは `~/.claude/settings.json` の `hooks` オブジェクトに記述します。各イベント名をキーとし、matcher（どのタイミングで発火するか）と実行するコマンドの配列を定義します。
+
+`init-claude-mem-settings.sh` は以下の JSON 構造を Python スクリプトで生成し、既存の `settings.json` にマージします：
+
+```python
+worker_base = "/usr/local/share/npm-global/lib/node_modules/claude-mem/plugin/scripts"
+bun_runner = f"node {worker_base}/bun-runner.js"
+worker_cmd = f"{worker_base}/worker-service.cjs"
+
+claude_mem_hooks = {
+    "SessionStart": [
+        {
+            "matcher": "startup|clear|compact",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": f"{bun_runner} {worker_cmd} start",
+                    "timeout": 60,
+                },
+                {
+                    "type": "command",
+                    "command": f"{bun_runner} {worker_cmd} hook claude-code context",
+                    "timeout": 60,
+                },
+            ],
+        }
+    ],
+    "UserPromptSubmit": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": f"{bun_runner} {worker_cmd} hook claude-code session-init",
+                    "timeout": 60,
+                }
+            ]
+        }
+    ],
+    "PostToolUse": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": f"{bun_runner} {worker_cmd} hook claude-code observation",
+                    "timeout": 120,
+                }
+            ]
+        }
+    ],
+    "Stop": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": f"{bun_runner} {worker_cmd} hook claude-code summarize",
+                    "timeout": 120,
+                },
+                {
+                    "type": "command",
+                    "command": f"{bun_runner} {worker_cmd} hook claude-code session-complete",
+                    "timeout": 30,
+                },
+            ]
+        }
+    ],
+}
+```
+
+**各フックの役割を分解すると：**
+
+| イベント | コマンド | 何をしているか |
+|----------|---------|--------------|
+| `SessionStart` | `worker-service.cjs start` | Worker デーモンが起動していなければ起動する（setsid デーモン化） |
+| `SessionStart` | `worker-service.cjs hook claude-code context` | 過去のセッションから関連コンテキストを検索し、会話冒頭に注入する |
+| `UserPromptSubmit` | `worker-service.cjs hook claude-code session-init` | 新しいセッションを初期化し、メタデータを記録する |
+| `PostToolUse` | `worker-service.cjs hook claude-code observation` | ツール使用（ファイル読み書き、コマンド実行等）を観察として記録する |
+| `Stop` (1) | `worker-service.cjs hook claude-code summarize` | セッション全体の要約を生成して保存する |
+| `Stop` (2) | `worker-service.cjs hook claude-code session-complete` | セッションの完了処理（統計更新等）を行う |
+
+**コマンドの実行パス：** 全てのフックは `bun-runner.js` を経由して実行されます。これは Bun ランタイムのラッパーで、`node bun-runner.js worker-service.cjs <サブコマンド>` の形式で呼び出されます。コンテナ内では Bun が `/home/node/.bun/bin/bun` にインストールされているため、`bun-runner.js` がパスを解決して実行します。
+
+**`matcher` の意味：** `SessionStart` フックの `"matcher": "startup|clear|compact"` は、セッション開始の種類を指定しています。`startup`（新規起動）、`clear`（`/clear` コマンド）、`compact`（コンテキスト圧縮）のいずれかの場合にフックが発火します。他のイベント（`UserPromptSubmit`、`PostToolUse`、`Stop`）は matcher がないため、常に発火します。
+
+**マージロジック：** スクリプトは既存の `settings.json` に claude-mem 以外のフックが既に登録されている場合でも安全に動作します：
+
+```python
+existing_hooks = settings.get("hooks", {})
+for event, hook_list in claude_mem_hooks.items():
+    if event not in existing_hooks:
+        existing_hooks[event] = hook_list
+    else:
+        # claude-mem のフックが既に存在するか確認
+        has_cm = any(
+            "worker-service" in h.get("command", "")
+            for group in existing_hooks[event]
+            for h in group.get("hooks", [])
+        )
+        if not has_cm:
+            existing_hooks[event].extend(hook_list)
+```
+
+イベントごとに `worker-service` を含むコマンドが既にあるかチェックし、なければ追加します。これにより、ユーザーが独自のフックを追加していても上書きされません。
 
 #### スクリプト 2：`start-chromadb.sh`（29行）
 
