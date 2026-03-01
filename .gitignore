@@ -1,1 +1,13 @@
 .claude/settings.local.json
+
+# Java
+*.class
+out/
+
+# Gradle
+.gradle/
+build/
+bin/
+gradle/
+gradlew
+gradlew.bat

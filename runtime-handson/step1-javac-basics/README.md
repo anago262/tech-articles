@@ -11,11 +11,13 @@
 
 ## 1.1 最初のコンパイルと実行
 
-まず、ソースディレクトリに移動します。
+VS Code のターミナル（``Ctrl + ` ``）を開き、ソースディレクトリに移動します。
 
 ```bash
 cd step1-javac-basics/src
 ```
+
+> **確認:** `ls` を実行して `Hello.java  Greeter.java  Main.java` が見えれば OK です。
 
 `Hello.java` をコンパイルします。
 

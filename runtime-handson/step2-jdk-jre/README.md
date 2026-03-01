@@ -11,6 +11,14 @@
 
 ## 2.1 今の環境を確認する
 
+ハンズオンのルートディレクトリに戻ってから始めます。Step 1 の `src/` にいる場合:
+
+```bash
+cd ../..
+```
+
+> **確認:** `ls` を実行して `step1-javac-basics  step2-jdk-jre  step3-gradle-intro ...` のようにステップ一覧が見えれば OK です。
+
 まず、この Dev Container にどんな Java 環境が入っているか確認しましょう。
 
 ```bash

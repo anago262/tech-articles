@@ -22,13 +22,15 @@ openjdk version "17.x.x" ...
 
 JDK 17 がインストールされています。
 
-`step5-toolchains` ディレクトリに移動して、Gradle Wrapper を生成し、テストを実行します。
+ハンズオンのルートディレクトリから `step5-toolchains/app` に移動して、Gradle Wrapper を生成し、テストを実行します。
 
 ```bash
 cd step5-toolchains/app
 gradle wrapper
 ./gradlew test
 ```
+
+> **ヒント:** 前のステップの `app/` ディレクトリにいる場合は `cd ../../step5-toolchains/app` で移動できます。
 
 実行結果:
 

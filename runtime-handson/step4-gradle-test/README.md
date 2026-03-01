@@ -11,19 +11,21 @@
 
 ## 4.1 プロジェクト構造
 
-まず `step4-gradle-test` ディレクトリに移動します。
+ハンズオンのルートディレクトリから、`step4-gradle-test` に移動します。
 
 ```bash
 cd step4-gradle-test
 ```
 
+> **ヒント:** 前のステップの `app/` ディレクトリにいる場合は `cd ../../step4-gradle-test` で移動できます。
+
 ディレクトリ構造を確認しましょう。
 
 ```
 step4-gradle-test/
-├── settings.gradle.kts
 └── app/
     ├── build.gradle.kts
+    ├── settings.gradle.kts
     └── src/
         ├── main/java/handson/
         │   └── Calculator.java      ← プロダクションコード
@@ -84,11 +86,13 @@ BUILD SUCCESSFUL in Xs
 
 `./gradlew test` を実行すると、Gradle は自動的に HTML 形式のテストレポートを生成します。
 
-```bash
-open build/reports/tests/test/index.html
+VS Code のサイドバーで以下のファイルを右クリック → 「Open with Live Server」、または単にファイルパスをクリックして開きます:
+
+```
+build/reports/tests/test/index.html
 ```
 
-> macOS 以外の場合は、上記パスをブラウザで直接開いてください。
+> **ヒント:** VS Code のエクスプローラーで `step4-gradle-test/app/build/reports/tests/test/index.html` を見つけてクリックするのが最も簡単です。HTML ファイルをダブルクリックするとプレビューが開きます。
 
 `./gradlew test` の出力に `HTML test report generated at` というパスが表示される場合もあります（`--info` オプション付きで表示されやすくなります）。
 
